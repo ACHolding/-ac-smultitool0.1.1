@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# AC Multitool 0.1 — Tactical Operations Suite
-# Authorized use on owned systems only.
+# AC's Multitool 0.1 — OPSEC Toolkit
+# Authorized use on owned systems only. No logs. No telemetry. Offline bundle.
 
 if [ -z "${BASH_VERSION:-}" ]; then
     exec bash "$0" "$@"
@@ -9,6 +9,23 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TOOLS_DIR="$SCRIPT_DIR/tools"
+COMMON_LIB="$TOOLS_DIR/lib/common.sh"
+
+if [ ! -f "$COMMON_LIB" ]; then
+    printf '[ERROR] Missing toolkit library: %s\n' "$COMMON_LIB" >&2
+    exit 1
+fi
+
+# shellcheck source=tools/lib/common.sh
+source "$COMMON_LIB"
+opsec_init
+
+cleanup_session() {
+    opsec_cleanup
+    unset choice target portrange SCRIPT_DIR TOOLS_DIR COMMON_LIB 2>/dev/null || true
+}
+
+trap cleanup_session EXIT INT TERM
 
 run_tool() {
     local tool="$1"
@@ -16,10 +33,10 @@ run_tool() {
     local path="$TOOLS_DIR/$tool"
 
     if [ ! -f "$path" ]; then
-        printf '[ERROR] Tool not found: %s\n' "$path" >&2
+        log_error "Tool not found: $path"
         return 1
     fi
-    bash "$path" "$@"
+    opsec_run "$path" "$@"
 }
 
 clear
@@ -35,23 +52,25 @@ cat << "ASCII"
               ac's multitool 0.1
 ASCII
 
-printf '\n[SYSTEM] Ready.\n'
+print_authorization_warning
+printf '\n[SYSTEM] OPSEC toolkit online. No disk logging enabled.\n'
 
 while true; do
-    printf '\n=== OPERATIONS MENU ===\n'
+    printf '\n=== OPSEC OPERATIONS MENU ===\n'
     echo "1) Port Scanner"
     echo "2) WiFi Credential Recovery"
     echo "3) System Reconnaissance"
     echo "4) Terminate Session"
-    read -p "Select operation [1-4]: " choice
+    read -r -p "Select operation [1-4]: " choice
 
     case $choice in
         1)
-            printf '[SCAN] Initiating port reconnaissance.\n'
-            read -p "Target IP or hostname: " target
-            read -p "Port range (default 1-1024): " portrange
+            printf '[SCAN] Initiating TCP port reconnaissance.\n'
+            read -r -p "Target IP or hostname: " target
+            read -r -p "Port range (default 1-1024): " portrange
             portrange=${portrange:-1-1024}
             run_tool portscan.sh "$target" "$portrange"
+            unset target portrange
             ;;
         2)
             run_tool wifi-recovery.sh
@@ -60,11 +79,12 @@ while true; do
             run_tool sysinfo.sh
             ;;
         4)
-            printf '[SYSTEM] Session terminated. Stand by.\n'
+            printf '[SYSTEM] Terminating session. Clearing variables.\n'
             exit 0
             ;;
         *)
             printf '[WARN] Invalid selection. Re-enter operation code.\n'
             ;;
     esac
+    unset choice
 done
